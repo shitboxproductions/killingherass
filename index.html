@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Drag &amp; Drop Game</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --blush: #ffe6f0;
+    --petal: #ffc2dc;
+    --rose: #ff6fae;
+    --berry: #7a2149;
+    --cream: #fff8fb;
+    --lilac: #d9c2ff;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    font-family: "Fredoka", "Trebuchet MS", "Segoe UI", sans-serif;
+    color: var(--berry);
+    background:
+      radial-gradient(circle at 12% 8%, var(--lilac) 0, transparent 38%),
+      radial-gradient(circle at 90% 92%, var(--petal) 0, transparent 42%),
+      var(--blush);
+    display: flex; align-items: center; justify-content: center;
+    padding: 16px;
+    overflow-x: hidden;
+  }
+  .card {
+    width: min(720px, 100%);
+    background: var(--cream);
+    border: 3px solid var(--rose);
+    border-radius: 28px;
+    box-shadow: 0 8px 0 var(--petal), 0 18px 40px rgba(255, 111, 174, .25);
+    padding: 22px 22px 26px;
+    text-align: center;
+    position: relative;
+  }
+  h1 { margin: 0 0 6px; font-size: clamp(1.6rem, 5vw, 2.3rem); font-weight: 600; }
+  p.sub { margin: 0 0 18px; opacity: .8; }
+  .screen { display: none; }
+  .screen.active { display: block; }
+
+  button {
+    font: inherit; font-weight: 600; font-size: 1.15rem;
+    color: #fff; background: var(--rose);
+    border: 0; border-radius: 999px;
+    padding: 12px 34px; cursor: pointer;
+    box-shadow: 0 5px 0 #d94f90;
+    transition: transform .08s, box-shadow .08s;
+  }
+  button:hover { transform: translateY(-1px); }
+  button:active { transform: translateY(4px); box-shadow: 0 1px 0 #d94f90; }
+  button:focus-visible, .model:focus-visible { outline: 3px solid var(--berry); outline-offset: 3px; }
+
+  /* start screen */
+  .start-pou { width: 120px; margin: 6px auto 18px; display: block; animation: bob 2.4s ease-in-out infinite; }
+  @keyframes bob { 50% { transform: translateY(-8px) rotate(-3deg); } }
+
+  /* stage */
+  .stage-frame {
+    position: relative; width: 100%;
+    aspect-ratio: 3 / 2;
+    border-radius: 20px; overflow: hidden;
+    border: 3px dashed var(--petal);
+    background: #fff;
+    transition: border-color .15s, box-shadow .15s;
+  }
+  .stage-frame.over { border-color: var(--rose); box-shadow: 0 0 0 6px rgba(255,111,174,.25); }
+  .stage-frame img.layer {
+    position: absolute; inset: 0; width: 100%; height: 100%;
+    object-fit: contain; user-select: none; -webkit-user-drag: none;
+  }
+  #topImg { opacity: 0; transition: opacity .8s ease; }
+  #topImg.show { opacity: 1; }
+
+  .tray {
+    margin-top: 16px; min-height: 92px;
+    display: flex; align-items: center; justify-content: center; gap: 14px;
+    flex-wrap: wrap;
+  }
+  .model {
+    width: 80px; height: 72px; object-fit: contain;
+    cursor: grab; touch-action: none; user-select: none; -webkit-user-drag: none;
+    filter: drop-shadow(0 4px 0 rgba(122,33,73,.18));
+    animation: bob 2.4s ease-in-out infinite;
+  }
+  .model.hidden { display: none; }
+  .hint { font-size: 1rem; opacity: .85; }
+  .ghost {
+    position: fixed; z-index: 50; width: 90px; pointer-events: none;
+    transform: translate(-50%, -50%) rotate(8deg) scale(1.1);
+    filter: drop-shadow(0 8px 6px rgba(122,33,73,.3));
+  }
+  #nextBtn { display: none; }
+  #nextBtn.show { display: inline-block; animation: pop .35s ease; }
+  @keyframes pop { from { transform: scale(.6); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+
+  .pou-big { width: 200px; margin: 10px auto 18px; display: block; animation: bob 2.4s ease-in-out infinite; }
+
+  /* popup */
+  .overlay {
+    position: fixed; inset: 0; z-index: 100;
+    background: rgba(122, 33, 73, .45);
+    display: none; align-items: center; justify-content: center; padding: 20px;
+  }
+  .overlay.show { display: flex; }
+  .popup {
+    background: var(--cream); border: 3px solid var(--rose); border-radius: 24px;
+    padding: 26px 26px 22px; max-width: 360px; text-align: center;
+    box-shadow: 0 8px 0 var(--petal);
+    animation: pop .3s ease;
+  }
+  .popup p { font-size: 1.2rem; margin: 0 0 18px; }
+
+  /* sparkles when a drop works */
+  .spark {
+    position: fixed; z-index: 60; pointer-events: none;
+    font-size: 22px; animation: fly .9s ease-out forwards;
+  }
+  @keyframes fly { to { transform: translate(var(--dx), var(--dy)) scale(.4); opacity: 0; } }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { animation: none !important; }
+    #topImg { transition: none; }
+  }
+</style>
+</head>
+<body>
+<main class="card">
+
+  <!-- START -->
+  <section id="screenStart" class="screen active">
+    <img class="start-pou" src="model.png" alt="" draggable="false">
+    <h1>Let the game begin</h1>
+    <p class="sub">Drag the little guy into the picture.</p>
+    <button id="startBtn">Start</button>
+  </section>
+
+  <!-- STAGES 1 & 2 -->
+  <section id="screenStage" class="screen">
+    <h1 id="stageTitle"></h1>
+    <div class="stage-frame" id="frame">
+      <img class="layer" id="baseImg" alt="" draggable="false">
+      <img class="layer" id="topImg" alt="" draggable="false">
+    </div>
+    <div class="tray">
+      <img class="model" id="model" src="model.png" alt="Draggable character" tabindex="0" draggable="false">
+      <span class="hint" id="hint">Drag me onto the picture!</span>
+      <button id="nextBtn">Next</button>
+    </div>
+  </section>
+
+  <!-- STAGE 3 -->
+  <section id="screenFinal" class="screen">
+    <h1>Stage 3: Pou CBT??</h1>
+    <img class="pou-big" src="model.png" alt="" draggable="false">
+    <button id="finalNext">Next</button>
+  </section>
+</main>
+
+<div class="overlay" id="overlay" role="dialog" aria-modal="true" aria-labelledby="popupText">
+  <div class="popup">
+    <p id="popupText">sorry @killingherass didn't draw this one :(</p>
+    <button id="popupClose">Play again</button>
+  </div>
+</div>
+
+<script>
+(function () {
+  // ---- Edit the stages here (titles / images) ----
+  var STAGES = [
+    { title: "Stage 1: Iron Maiden", empty: "bull_empty.png",    full: "bull_full.jpg" },
+    { title: "Stage 2: Brazen Bull", empty: "chamber_empty.png", full: "chamber_full.jpg" }
+  ];
+
+  var $ = function (id) { return document.getElementById(id); };
+  var screens = { start: $("screenStart"), stage: $("screenStage"), final: $("screenFinal") };
+  var frame = $("frame"), baseImg = $("baseImg"), topImg = $("topImg");
+  var model = $("model"), nextBtn = $("nextBtn"), hint = $("hint");
+  var stageIndex = 0, solved = false;
+
+  function show(name) {
+    for (var k in screens) screens[k].classList.toggle("active", k === name);
+  }
+
+  // preload every image so the swap is instant
+  STAGES.forEach(function (s) { new Image().src = s.empty; new Image().src = s.full; });
+
+  // ---- sound: tiny two-note chime via WebAudio (no audio file needed) ----
+  var ctx;
+  function chime() {
+    try {
+      ctx = ctx || new (window.AudioContext || window.webkitAudioContext)();
+      if (ctx.state === "suspended") ctx.resume();
+      [660, 990].forEach(function (f, i) {
+        var o = ctx.createOscillator(), g = ctx.createGain();
+        var t = ctx.currentTime + i * 0.11;
+        o.type = "triangle"; o.frequency.value = f;
+        g.gain.setValueAtTime(0.0001, t);
+        g.gain.exponentialRampToValueAtTime(0.25, t + 0.02);
+        g.gain.exponentialRampToValueAtTime(0.0001, t + 0.35);
+        o.connect(g); g.connect(ctx.destination);
+        o.start(t); o.stop(t + 0.4);
+      });
+    } catch (e) {}
+  }
+
+  function sparkles(x, y) {
+    var glyphs = ["✦", "♡", "✧", "♥"];
+    for (var i = 0; i < 10; i++) {
+      var s = document.createElement("span");
+      s.className = "spark"; s.textContent = glyphs[i % glyphs.length];
+      s.style.left = x + "px"; s.style.top = y + "px";
+      s.style.color = i % 2 ? "#ff6fae" : "#b58cff";
+      var a = Math.random() * Math.PI * 2, d = 50 + Math.random() * 70;
+      s.style.setProperty("--dx", Math.cos(a) * d + "px");
+      s.style.setProperty("--dy", Math.sin(a) * d + "px");
+      document.body.appendChild(s);
+      setTimeout(function (el) { el.remove(); }.bind(null, s), 950);
+    }
+  }
+
+  function loadStage() {
+    var s = STAGES[stageIndex];
+    solved = false;
+    $("stageTitle").textContent = s.title;
+    topImg.style.transition = "none";
+    topImg.classList.remove("show");
+    baseImg.src = s.empty;
+    topImg.src = s.full;
+    void topImg.offsetWidth;          // reflow, then restore the fade
+    topImg.style.transition = "";
+    model.classList.remove("hidden");
+    hint.style.display = "";
+    nextBtn.classList.remove("show");
+    show("stage");
+  }
+
+  function success(x, y) {
+    solved = true;
+    topImg.classList.add("show");     // empty -> full crossfade
+    model.classList.add("hidden");
+    hint.style.display = "none";
+    nextBtn.classList.add("show");
+    chime();
+    sparkles(x, y);
+  }
+
+  // ---- drag & drop (pointer events: works with mouse, touch and pen) ----
+  var ghost = null;
+  function inFrame(x, y) {
+    var r = frame.getBoundingClientRect();
+    return x >= r.left && x <= r.right && y >= r.top && y <= r.bottom;
+  }
+  model.addEventListener("pointerdown", function (e) {
+    if (solved) return;
+    e.preventDefault();
+    model.setPointerCapture(e.pointerId);
+    ghost = document.createElement("img");
+    ghost.src = "model.png"; ghost.className = "ghost"; ghost.alt = "";
+    ghost.style.left = e.clientX + "px"; ghost.style.top = e.clientY + "px";
+    document.body.appendChild(ghost);
+    model.style.opacity = ".35";
+  });
+  model.addEventListener("pointermove", function (e) {
+    if (!ghost) return;
+    ghost.style.left = e.clientX + "px"; ghost.style.top = e.clientY + "px";
+    frame.classList.toggle("over", inFrame(e.clientX, e.clientY));
+  });
+  function endDrag(e) {
+    if (!ghost) return;
+    var hit = e.type === "pointerup" && inFrame(e.clientX, e.clientY);
+    ghost.remove(); ghost = null;
+    frame.classList.remove("over");
+    model.style.opacity = "";
+    if (hit) success(e.clientX, e.clientY);
+  }
+  model.addEventListener("pointerup", endDrag);
+  model.addEventListener("pointercancel", endDrag);
+
+  // keyboard fallback: Enter / Space drops the character in
+  model.addEventListener("keydown", function (e) {
+    if ((e.key === "Enter" || e.key === " ") && !solved) {
+      e.preventDefault();
+      var r = frame.getBoundingClientRect();
+      success(r.left + r.width / 2, r.top + r.height / 2);
+    }
+  });
+
+  // ---- flow ----
+  $("startBtn").addEventListener("click", function () { stageIndex = 0; loadStage(); });
+  nextBtn.addEventListener("click", function () {
+    stageIndex++;
+    if (stageIndex < STAGES.length) loadStage(); else show("final");
+  });
+  $("finalNext").addEventListener("click", function () { $("overlay").classList.add("show"); $("popupClose").focus(); });
+  $("popupClose").addEventListener("click", function () { $("overlay").classList.remove("show"); show("start"); });
+})();
+</script>
+</body>
+</html>
